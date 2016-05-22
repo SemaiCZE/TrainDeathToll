@@ -14,20 +14,20 @@ import codecs
 import collections
 import io
 import os
+import platform
 import re
+import sys
 import socket
 import struct
-import warnings
 
 from . import __version__
 from . import certs
 from .compat import parse_http_list as _parse_list_header
 from .compat import (quote, urlparse, bytes, str, OrderedDict, unquote, is_py2,
-                     builtin_str, getproxies, proxy_bypass, urlunparse,
-                     basestring)
+                     builtin_str, getproxies, proxy_bypass)
 from .cookies import RequestsCookieJar, cookiejar_from_dict
 from .structures import CaseInsensitiveDict
-from .exceptions import InvalidURL, FileModeWarning
+from .exceptions import MissingSchema, InvalidURL
 
 _hush_pyflakes = (RequestsCookieJar,)
 
@@ -46,86 +46,45 @@ def dict_to_sequence(d):
 
 
 def super_len(o):
-    total_length = 0
-    current_position = 0
-
     if hasattr(o, '__len__'):
-        total_length = len(o)
+        return len(o)
 
-    elif hasattr(o, 'len'):
-        total_length = o.len
+    if hasattr(o, 'len'):
+        return o.len
 
-    elif hasattr(o, 'getvalue'):
-        # e.g. BytesIO, cStringIO.StringIO
-        total_length = len(o.getvalue())
-
-    elif hasattr(o, 'fileno'):
+    if hasattr(o, 'fileno'):
         try:
             fileno = o.fileno()
         except io.UnsupportedOperation:
             pass
         else:
-            total_length = os.fstat(fileno).st_size
+            return os.fstat(fileno).st_size
 
-            # Having used fstat to determine the file length, we need to
-            # confirm that this file was opened up in binary mode.
-            if 'b' not in o.mode:
-                warnings.warn((
-                    "Requests has determined the content-length for this "
-                    "request using the binary size of the file: however, the "
-                    "file has been opened in text mode (i.e. without the 'b' "
-                    "flag in the mode). This may lead to an incorrect "
-                    "content-length. In Requests 3.0, support will be removed "
-                    "for files in text mode."),
-                    FileModeWarning
-                )
+    if hasattr(o, 'getvalue'):
+        # e.g. BytesIO, cStringIO.StringI
+        return len(o.getvalue())
 
-    if hasattr(o, 'tell'):
-        try:
-            current_position = o.tell()
-        except (OSError, IOError):
-            # This can happen in some weird situations, such as when the file
-            # is actually a special file descriptor like stdin. In this
-            # instance, we don't know what the length is, so set it to zero and
-            # let requests chunk it instead.
-            current_position = total_length
-
-    return max(0, total_length - current_position)
-
-
-def get_netrc_auth(url, raise_errors=False):
+def get_netrc_auth(url):
     """Returns the Requests tuple auth for a given url from netrc."""
 
     try:
         from netrc import netrc, NetrcParseError
 
+        locations = (os.path.expanduser('~/{0}'.format(f)) for f in NETRC_FILES)
         netrc_path = None
 
-        for f in NETRC_FILES:
-            try:
-                loc = os.path.expanduser('~/{0}'.format(f))
-            except KeyError:
-                # os.path.expanduser can fail when $HOME is undefined and
-                # getpwuid fails. See http://bugs.python.org/issue20164 &
-                # https://github.com/kennethreitz/requests/issues/1846
-                return
-
-            if os.path.exists(loc):
+        for loc in locations:
+            if os.path.exists(loc) and not netrc_path:
                 netrc_path = loc
-                break
 
         # Abort early if there isn't one.
         if netrc_path is None:
-            return
+            return netrc_path
 
         ri = urlparse(url)
 
-        # Strip port numbers from netloc. This weird `if...encode`` dance is
-        # used for Python 3.2, which doesn't support unicode literals.
-        splitstr = b':'
-        if isinstance(url, str):
-            splitstr = splitstr.decode('ascii')
-        host = ri.netloc.split(splitstr)[0]
+        # Strip port numbers from netloc
+        host = ri.netloc.split(':')[0]
 
         try:
             _netrc = netrc(netrc_path).authenticators(host)
@@ -135,9 +94,8 @@ def get_netrc_auth(url, raise_errors=False):
                 return (_netrc[login_i], _netrc[2])
         except (NetrcParseError, IOError):
             # If there was a parsing error or a permissions issue reading the file,
-            # we'll just skip netrc auth unless explicitly asked to raise errors.
-            if raise_errors:
-                raise
+            # we'll just skip netrc auth
+            pass
 
     # AppEngine hackiness.
     except (ImportError, AttributeError):
@@ -147,8 +105,7 @@ def get_netrc_auth(url, raise_errors=False):
 def guess_filename(obj):
     """Tries to guess the filename of the given object."""
     name = getattr(obj, 'name', None)
-    if (name and isinstance(name, basestring) and name[0] != '<' and
-            name[-1] != '>'):
+    if name and name[0] != '<' and name[-1] != '>':
         return os.path.basename(name)
 
 
@@ -321,11 +278,6 @@ def get_encodings_from_content(content):
 
     :param content: bytestring to extract encodings from.
     """
-    warnings.warn((
-        'In requests 3.0, get_encodings_from_content will be removed. For '
-        'more information, please see the discussion on issue #2266. (This'
-        ' warning should only appear once.)'),
-        DeprecationWarning)
 
     charset_re = re.compile(r'<meta.*?charset=["\']*(.+?)["\'>]', flags=re.I)
     pragma_re = re.compile(r'<meta.*?content=["\']*;?charset=(.+?)["\'>]', flags=re.I)
@@ -390,14 +342,12 @@ def get_unicode_from_response(r):
     Tried:
 
     1. charset from content-type
-    2. fall back and replace all unicode characters
+
+    2. every encodings from ``<meta ... charset=XXX>``
+
+    3. fall back and replace all unicode characters
 
     """
-    warnings.warn((
-        'In requests 3.0, get_unicode_from_response will be removed. For '
-        'more information, please see the discussion on issue #2266. (This'
-        ' warning should only appear once.)'),
-        DeprecationWarning)
 
     tried_encodings = []
 
@@ -451,18 +401,10 @@ def requote_uri(uri):
     This function passes the given URI through an unquote/quote cycle to
     ensure that it is fully and consistently quoted.
     """
-    safe_with_percent = "!#$%&'()*+,/:;=?@[]~"
-    safe_without_percent = "!#$&'()*+,/:;=?@[]~"
-    try:
-        # Unquote only the unreserved characters
-        # Then quote only illegal characters (do not quote reserved,
-        # unreserved, or '%')
-        return quote(unquote_unreserved(uri), safe=safe_with_percent)
-    except InvalidURL:
-        # We couldn't unquote the given URI, so let's try quoting it, but
-        # there may be unquoted '%'s in the URI. We need to make sure they're
-        # properly quoted so they do not cause issues elsewhere.
-        return quote(uri, safe=safe_without_percent)
+    # Unquote only the unreserved characters
+    # Then quote only illegal characters (do not quote reserved, unreserved,
+    # or '%')
+    return quote(unquote_unreserved(uri), safe="!#$%&'()*+,/:;=?@[]~")
 
 
 def address_in_network(ip, net):
@@ -515,10 +457,9 @@ def is_valid_cidr(string_network):
     return True
 
 
-def should_bypass_proxies(url):
-    """
-    Returns whether we should bypass proxies or not.
-    """
+def get_environ_proxies(url):
+    """Return a dict of environment proxies."""
+
     get_proxy = lambda k: os.environ.get(k) or os.environ.get(k.upper())
 
     # First check whether no_proxy is defined. If it is, check that the URL
@@ -529,76 +470,68 @@ def should_bypass_proxies(url):
     if no_proxy:
         # We need to check whether we match here. We need to see if we match
         # the end of the netloc, both with and without the port.
-        no_proxy = (
-            host for host in no_proxy.replace(' ', '').split(',') if host
-        )
+        no_proxy = no_proxy.replace(' ', '').split(',')
 
         ip = netloc.split(':')[0]
         if is_ipv4_address(ip):
             for proxy_ip in no_proxy:
                 if is_valid_cidr(proxy_ip):
                     if address_in_network(ip, proxy_ip):
-                        return True
+                        return {}
         else:
             for host in no_proxy:
                 if netloc.endswith(host) or netloc.split(':')[0].endswith(host):
                     # The URL does match something in no_proxy, so we don't want
                     # to apply the proxies on this URL.
-                    return True
+                    return {}
 
     # If the system proxy settings indicate that this URL should be bypassed,
     # don't proxy.
-    # The proxy_bypass function is incredibly buggy on OS X in early versions
-    # of Python 2.6, so allow this call to fail. Only catch the specific
-    # exceptions we've seen, though: this call failing in other ways can reveal
-    # legitimate problems.
-    try:
-        bypass = proxy_bypass(netloc)
-    except (TypeError, socket.gaierror):
-        bypass = False
-
-    if bypass:
-        return True
-
-    return False
-
-
-def get_environ_proxies(url):
-    """Return a dict of environment proxies."""
-    if should_bypass_proxies(url):
+    if proxy_bypass(netloc):
         return {}
-    else:
-        return getproxies()
 
-
-def select_proxy(url, proxies):
-    """Select a proxy for the url, if applicable.
-
-    :param url: The url being for the request
-    :param proxies: A dictionary of schemes or schemes and hosts to proxy URLs
-    """
-    proxies = proxies or {}
-    urlparts = urlparse(url)
-    if urlparts.hostname is None:
-        proxy = None
-    else:
-        proxy = proxies.get(urlparts.scheme+'://'+urlparts.hostname)
-    if proxy is None:
-        proxy = proxies.get(urlparts.scheme)
-    return proxy
+    # If we get here, we either didn't have no_proxy set or we're not going
+    # anywhere that no_proxy applies to, and the system settings don't require
+    # bypassing the proxy for the current URL.
+    return getproxies()
 
 
 def default_user_agent(name="python-requests"):
     """Return a string representing the default user agent."""
-    return '%s/%s' % (name, __version__)
+    _implementation = platform.python_implementation()
+
+    if _implementation == 'CPython':
+        _implementation_version = platform.python_version()
+    elif _implementation == 'PyPy':
+        _implementation_version = '%s.%s.%s' % (sys.pypy_version_info.major,
+                                                sys.pypy_version_info.minor,
+                                                sys.pypy_version_info.micro)
+        if sys.pypy_version_info.releaselevel != 'final':
+            _implementation_version = ''.join([_implementation_version, sys.pypy_version_info.releaselevel])
+    elif _implementation == 'Jython':
+        _implementation_version = platform.python_version()  # Complete Guess
+    elif _implementation == 'IronPython':
+        _implementation_version = platform.python_version()  # Complete Guess
+    else:
+        _implementation_version = 'Unknown'
+
+    try:
+        p_system = platform.system()
+        p_release = platform.release()
+    except IOError:
+        p_system = 'Unknown'
+        p_release = 'Unknown'
+
+    return " ".join(['%s/%s' % (name, __version__),
+                     '%s/%s' % (_implementation, _implementation_version),
+                     '%s/%s' % (p_system, p_release)])
 
 
 def default_headers():
     return CaseInsensitiveDict({
         'User-Agent': default_user_agent(),
-        'Accept-Encoding': ', '.join(('gzip', 'deflate')),
-        'Accept': '*/*',
-        'Connection': 'keep-alive',
+        'Accept-Encoding': ', '.join(('gzip', 'deflate', 'compress')),
+        'Accept': '*/*'
     })
 
 
@@ -611,19 +544,21 @@ def parse_header_links(value):
 
     links = []
 
-    replace_chars = ' \'"'
+    replace_chars = " '\""
 
-    for val in re.split(', *<', value):
+    for val in value.split(","):
         try:
-            url, params = val.split(';', 1)
+            url, params = val.split(";", 1)
         except ValueError:
             url, params = val, ''
 
-        link = {'url': url.strip('<> \'"')}
+        link = {}
 
-        for param in params.split(';'):
+        link["url"] = url.strip("<> '\"")
+
+        for param in params.split(";"):
             try:
-                key, value = param.split('=')
+                key, value = param.split("=")
             except ValueError:
                 break
 
@@ -669,31 +604,24 @@ def guess_json_utf(data):
     return None
 
 
-def prepend_scheme_if_needed(url, new_scheme):
-    """Given a URL that may or may not have a scheme, prepend the given scheme.
-    Does not replace a present scheme with the one provided as an argument."""
-    scheme, netloc, path, params, query, fragment = urlparse(url, new_scheme)
+def except_on_missing_scheme(url):
+    """Given a URL, raise a MissingSchema exception if the scheme is missing.
+    """
+    scheme, netloc, path, params, query, fragment = urlparse(url)
 
-    # urlparse is a finicky beast, and sometimes decides that there isn't a
-    # netloc present. Assume that it's being over-cautious, and switch netloc
-    # and path if urlparse decided there was no netloc.
-    if not netloc:
-        netloc, path = path, netloc
-
-    return urlunparse((scheme, netloc, path, params, query, fragment))
+    if not scheme:
+        raise MissingSchema('Proxy URLs must have explicit schemes.')
 
 
 def get_auth_from_url(url):
     """Given a url with authentication components, extract them into a tuple of
     username,password."""
-    parsed = urlparse(url)
-
-    try:
-        auth = (unquote(parsed.username), unquote(parsed.password))
-    except (AttributeError, TypeError):
-        auth = ('', '')
-
-    return auth
+    if url:
+        url = unquote(url)
+        parsed = urlparse(url)
+        return (parsed.username, parsed.password)
+    else:
+        return ('', '')
 
 
 def to_native_string(string, encoding='ascii'):
@@ -702,6 +630,8 @@ def to_native_string(string, encoding='ascii'):
     string in the native string type, encoding and decoding where necessary.
     This assumes ASCII unless told otherwise.
     """
+    out = None
+
     if isinstance(string, builtin_str):
         out = string
     else:
@@ -711,18 +641,3 @@ def to_native_string(string, encoding='ascii'):
             out = string.decode(encoding)
 
     return out
-
-
-def urldefragauth(url):
-    """
-    Given a url remove the fragment and the authentication part
-    """
-    scheme, netloc, path, params, query, fragment = urlparse(url)
-
-    # see func:`prepend_scheme_if_needed`
-    if not netloc:
-        netloc, path = path, netloc
-
-    netloc = netloc.rsplit('@', 1)[-1]
-
-    return urlunparse((scheme, netloc, path, params, query, ''))
