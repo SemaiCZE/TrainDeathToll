@@ -1,0 +1,26 @@
+application: traindeathtoll
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /
+  script: render_page.app
+      
+- url: /index\.html
+  script: render_page.app
+      
+- url: /stylesheets
+  static_dir: stylesheets
+      
+- url: /read_tweets
+  script: read_tweets.app
+
+- url: /.*
+  script: not_found.app
+
+libraries:
+- name: ssl
+  version: latest
+

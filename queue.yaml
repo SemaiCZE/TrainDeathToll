@@ -1,0 +1,4 @@
+queue:
+- name: new-tweets
+  mode: pull
+
