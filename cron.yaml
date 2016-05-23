@@ -1,0 +1,5 @@
+cron:
+- description: "Get new tweets"
+  url: /read_tweets
+  schedule: every 10 mins
+
