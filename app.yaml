@@ -17,6 +17,9 @@ handlers:
 - url: /read_tweets
   script: read_tweets.app
 
+- url: /process_tweets
+  script: process_tweets.app
+
 - url: /.*
   script: not_found.app
 
