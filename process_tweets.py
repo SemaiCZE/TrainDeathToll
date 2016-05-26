@@ -2,44 +2,69 @@
 
 import json
 import webapp2
+import tdt_database
+from datetime import datetime
 from google.appengine.api import taskqueue
 from google.appengine.ext import db
+from tdt_database import Tweet
 
 
 queue_name = "new-tweets"
 
-
-class Tweet(db.Model):
-    """Models one tweet entry in database"""
-    publish_time = db.DateTimeProperty(required=True)
-    track_number = db.IntegerProperty(required=True)
-    link = db.LinkProperty(required=True)
-    desired_end = db.DateTimeProperty()
-    cause = db.TextProperty()
-    description = db.TextProperty()
-
-
-def get_tasks(queue):
-    tasks = queue.lease_tasks(3600, 100)
-    return tasks
-
 def get_tweets(tasks):
-    tweets = []
-    return tweets
+    start_tweets = []
+    end_tweets = []
 
-def save_tweets(tweets):
-    return True
+    for task in tasks:
+        if task.tag == "START":
+            start_tweets.append(json.loads(task.payload, encoding='utf8'))
+        else:
+            end_tweets.append(json.loads(task.payload, encoding='utf8'))
+
+    return start_tweets, end_tweets
+
+@db.transactional
+def save_tweets(start_tweets, end_tweets):
+    for tweet in start_tweets:
+        dtweet = Tweet(
+            publish_time = datetime.fromtimestamp(tweet['publish_time']),
+            track_number = tweet['track_number'],
+            link = tweet['link']
+        )
+        if 'desired_end' in tweet:
+            dtweet.desired_end = datetime.strptime(tweet['desired_end'], '%H:%M').time()
+        if 'cause' in tweet:
+            dtweet.cause = tweet['cause']
+        if 'description' in tweet:
+            dtweet.description = tweet['description']
+
+        dtweet.put()
+
+    for tweet in end_tweets:
+        pass
+
+    raise Exception('error')
 
 class ProcessTweets(webapp2.RequestHandler):
     def get(self):
         queue = taskqueue.Queue(queue_name)
-        tasks = get_tasks(queue)
-        tweets = get_tweets(tasks)
-        if save_tweets(tweets):
+        tasks = queue.lease_tasks(60, 100)
+        start_tweets, end_tweets = get_tweets(tasks)
+
+        self.response.out.write('Start tweets:<br>\n')
+        for tweet in start_tweets:
+            self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
+        self.response.out.write('End tweets:<br>\n')
+        for tweet in end_tweets:
+            self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
+        self.response.out.write('<br>')
+
+        try:
+            save_tweets(start_tweets, end_tweets)
             queue.delete_tasks(tasks)
-            self.response.out.write('Tweets processed successfully!\n')
-        else:
-            self.response.out.write('Error occured while processing tweets\n')
+            self.response.out.write('Tweets processed successfully!<br>')
+        except Exception, e:
+            self.response.out.write('Error occured while processing tweets: %s<br>' % e)
 
 
 app = webapp2.WSGIApplication([('/process_tweets', ProcessTweets)], debug=True)
