@@ -35,6 +35,9 @@ def get_status_info(status):
     text = status.text
     result = dict()
 
+    # Add tweet id which will be used as index in database
+    result["tweet_id"] = status.id
+
     # Add tweet creation time to results
     result["publish_time"] = status.created_at_in_seconds
 

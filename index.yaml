@@ -1,0 +1,6 @@
+indexes:
+- kind: Tweet
+  ancestor: no
+  properties:
+  - name: tweet_id
+    direction: asc
