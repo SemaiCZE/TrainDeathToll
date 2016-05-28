@@ -10,9 +10,9 @@ class Tweet(db.Model):
     """Models one tweet entry in database"""
     tweet_id = db.IntegerProperty(required=True)
     publish_time = db.DateTimeProperty(required=True)
-    track_number = db.TextProperty(required=True)
+    track_number = db.StringProperty(required=True)
     link = db.LinkProperty()
     desired_end = db.TimeProperty()
     end = db.DateTimeProperty()
-    cause = db.TextProperty()
-    description = db.TextProperty()
+    cause = db.StringProperty()
+    description = db.StringProperty()
