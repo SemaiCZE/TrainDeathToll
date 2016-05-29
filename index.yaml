@@ -3,3 +3,9 @@ indexes:
   ancestor: yes
   properties:
   - name: tweet_id
+
+- kind: Tweet
+  properties:
+  - name: end
+  - name: publish_time
+
