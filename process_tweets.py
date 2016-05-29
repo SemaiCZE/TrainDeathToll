@@ -9,21 +9,20 @@ from google.appengine.ext import db
 from tdt_database import Tweet
 
 
-queue_name = "new-tweets"
-
-
 def get_tweets(tasks):
     start_tweets = []
     start_tasks = []
     end_tweets = []
     end_tasks = []
+    task_list = json.loads(tasks, encoding='utf8')
 
-    for task in tasks:
-        if task.tag == "START":
-            start_tweets.append(json.loads(task.payload, encoding='utf8'))
+    for task in task_list:
+        task_data = json.loads(task)
+        if task_data["tag"] == "START":
+            start_tweets.append(task_data)
             start_tasks.append(task)
         else:
-            end_tweets.append(json.loads(task.payload, encoding='utf8'))
+            end_tweets.append(task_data)
             end_tasks.append(task)
 
     return start_tasks, end_tasks, start_tweets, end_tweets
@@ -67,11 +66,10 @@ def save_end_tweets(end_tweets):
 
 
 class ProcessTweets(webapp2.RequestHandler):
-    def get(self):
-        queue = taskqueue.Queue(queue_name)
-        tasks = queue.lease_tasks(60, 200)
+    def post(self):
+        tasks = self.request.body
         start_tasks, end_tasks, start_tweets, end_tweets = get_tweets(tasks)
-
+    
         self.response.out.write('Start tweets:<br>\n')
         for tweet in start_tweets:
             self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
@@ -79,14 +77,14 @@ class ProcessTweets(webapp2.RequestHandler):
         for tweet in end_tweets:
             self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
         self.response.out.write('<br>')
-
+    
         try:
             save_start_tweets(start_tweets)
             queue.delete_tasks(start_tasks)
             self.response.out.write('Start tweets processed successfully!<br>')
         except Exception, e:
             self.response.out.write('Error occurred while processing start tweets: %s<br>' % e)
-
+    
         try:
             save_end_tweets(end_tweets)
             queue.delete_tasks(end_tasks)

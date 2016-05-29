@@ -8,6 +8,7 @@ from google.appengine.api import taskqueue, memcache
 
 twitter_user = "cdmimoradnosti"
 queue_name = "new-tweets"
+task_process_script = "/process_tweets"
 
 
 def split_list(alist, wanted_parts=1):
@@ -43,9 +44,9 @@ def get_status_info(status):
 
     # Handle start and stop tags by first symbol (+ or -)
     if text[0] == u'+':
-        tag = "START"
+        result["tag"] = "START"
     else:
-        tag = "END"
+        result["tag"] = "END"
     text = text[1:]
 
     # Get track number
@@ -70,7 +71,7 @@ def get_status_info(status):
     # Remaining part is description of place
     result["description"] = text
 
-    return tag, json.dumps(result, ensure_ascii=False, encoding='utf8')
+    return json.dumps(result, ensure_ascii=False, encoding='utf8')
 
 
 class ReadTweets(webapp2.RequestHandler):
@@ -85,25 +86,23 @@ class ReadTweets(webapp2.RequestHandler):
         access_secret = environ['ACCESS_SECRET']
 
         q = taskqueue.Queue(queue_name)
-        tasks = []
         tweets = []
 
         api = twitter.Api(consumer_key, consumer_secret, access_key, access_secret, cache=None)
         statuses = get_tweets(api)
         for status in statuses:
-            status_tag, status_data = get_status_info(status)
+            status_data = get_status_info(status)
             tweets.append(status_data)
-            tasks.append(taskqueue.Task(payload=status_data, method='PULL', tag=status_tag))
 
-        # Only 100 item at one time can be added to task queue
-        if len(tasks) >= 100:
-            split_tasks = split_list(tasks, wanted_parts=4)
+        # Don't send more than 100 tweets at once
+        if len(tweets) >= 100:
+            split_tasks = split_list(tweets, wanted_parts=4)
             for item in split_tasks:
-                q.add(item)
+                q.add([taskqueue.Task(payload=json.dumps(item), method='POST', url=task_process_script)])
         else:
-            q.add(tasks)
+            q.add([taskqueue.Task(payload=json.dumps(tweets), method='POST', url=task_process_script)])
 
-        self.response.out.write('\n'.join(tweets))
+        self.response.out.write('<br>\n'.join(tweets))
 
 
 app = webapp2.WSGIApplication([('/read_tweets', ReadTweets)], debug=True)
