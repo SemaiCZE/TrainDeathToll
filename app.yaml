@@ -11,14 +11,13 @@ handlers:
 - url: /index\.html
   script: render_page.app
       
-- url: /stylesheets
-  static_dir: stylesheets
-      
 - url: /read_tweets
   script: read_tweets.app
+  login: admin
 
 - url: /process_tweets
   script: process_tweets.app
+  login: admin
 
 - url: /.*
   script: not_found.app

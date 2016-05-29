@@ -27,7 +27,7 @@ def get_tweets(twitter_api):
     else:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, count=200, include_rts=False,
                                                exclude_replies=True)
-        memcache.add(cache_tweet_id, statuses[0].id, 3600)  # cache for max 1 hour
+        memcache.add(cache_tweet_id, statuses[0].id, 604800)  # cache for 1 week
 
     return statuses
 
