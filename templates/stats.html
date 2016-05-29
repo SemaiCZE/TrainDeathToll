@@ -1,4 +1,11 @@
 {% extends "layout.html" %}
 {% block content %}
-<h1>Hello</h1>
+<h2>Současné mimořádnosti</h2>
+{% for event in current_events %}
+    <div>
+        <h3>{{ event.cause }}</h3>
+        <span>Nahlášeno {{ event.publish_time }}, předpokládaný konec {{ event.desired_end }}</span>
+        <p>{{ event.description }}</p>
+    </div>
+{% endfor %}
 {% endblock %}

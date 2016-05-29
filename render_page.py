@@ -1,5 +1,6 @@
 import webapp2
 from webapp2_extras import jinja2
+from tdt_database import Tweet
 
 
 class MainPage(webapp2.RequestHandler):
@@ -12,7 +13,8 @@ class MainPage(webapp2.RequestHandler):
         self.response.write(rv)
 
     def get(self):
-        self.render_response("stats.html")
+        current_events = Tweet.gql("WHERE end = :none ORDER BY publish_time", none = None).fetch(100)
+        self.render_response("stats.html", current_events = current_events)
 
 
 app = webapp2.WSGIApplication([('/', MainPage), ('/index.html', MainPage)], debug=True)
