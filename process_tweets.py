@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 import json
+import random
 import webapp2
 import tdt_database
 from datetime import datetime
 from google.appengine.api import taskqueue
 from google.appengine.ext import db
-from tdt_database import Tweet
+from tdt_database import Tweet, TrackEventCounterShard
 
 
 def get_tweets(tasks):
@@ -28,6 +29,21 @@ def get_tweets(tasks):
     return start_tasks, end_tasks, start_tweets, end_tweets
 
 
+def update_track_event_counter(track_number):
+    shard_number = random.randint(0, TrackEventCounterShard.SHARD_COUNT - 1)
+    shard = TrackEventCounterShard.all().filter("shard_number=", shard_number).filter("track_number=", track_number).ancestor(tdt_database.tweets_key()).get()
+
+    if shard is None:
+        shard = TrackEventCounterShard(
+            shard_number=shard_number,
+            track_number=track_number,
+            parent=tdt_database.tweets_key()
+        )
+
+    shard.event_count += 1
+    shard.put()
+
+
 def save_new_tweet(tweet):
     dtweet = Tweet(
         parent=tdt_database.tweets_key(),
@@ -45,6 +61,7 @@ def save_new_tweet(tweet):
         dtweet.description = tweet['description']
 
     dtweet.put()
+    update_track_event_counter(tweet['track_number'])
 
 
 @db.transactional
@@ -78,19 +95,11 @@ class ProcessTweets(webapp2.RequestHandler):
             self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
         self.response.out.write('<br>')
     
-        try:
-            save_start_tweets(start_tweets)
-            queue.delete_tasks(start_tasks)
-            self.response.out.write('Start tweets processed successfully!<br>')
-        except Exception, e:
-            self.response.out.write('Error occurred while processing start tweets: %s<br>' % e)
-    
-        try:
-            save_end_tweets(end_tweets)
-            queue.delete_tasks(end_tasks)
-            self.response.out.write('End tweets processed successfully!<br>')
-        except Exception, e:
-            self.response.out.write('Error occurred while processing end tweets: %s<br>' % e)
+        save_start_tweets(start_tweets)
+        self.response.out.write('Start tweets processed successfully!<br>')
+
+        save_end_tweets(end_tweets)
+        self.response.out.write('End tweets processed successfully!<br>')
 
 
 app = webapp2.WSGIApplication([('/process_tweets', ProcessTweets)], debug=True)

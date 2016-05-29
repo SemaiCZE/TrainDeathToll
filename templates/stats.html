@@ -1,11 +1,27 @@
 {% extends "layout.html" %}
 {% block content %}
-<h2>Současné mimořádnosti</h2>
-{% for event in current_events %}
-    <div>
-        <h3>{{ event.cause }}</h3>
-        <span>Nahlášeno {{ event.publish_time }}, předpokládaný konec {{ event.desired_end }}</span>
-        <p>{{ event.description }}</p>
+<div class="row">
+    <div class="col-md-6">
+        <h2>Současné mimořádnosti</h2>
+        {% for event in current_events %}
+            <div>
+                <h3>{{ event.cause }}</h3>
+                <span>Nahlášeno {{ event.publish_time }}, předpokládaný konec {{ event.desired_end }}</span>
+                <p>{{ event.description }}</p>
+            </div>
+        {% endfor %}
     </div>
-{% endfor %}
+    <div class="col-md-6">
+        <h2>Nejporuchovější tratě</h2>
+        <div>
+            {% for track, count in frequent_tracks %}
+            <div class="progress">
+                <div class="progress-bar" style="width: {{ 100 * count / frequent_tracks_max }}%; text-align: left; padding-left: 1em">
+                    <strong>{{ track }}</strong> ({{ count }})
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 {% endblock %}
