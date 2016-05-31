@@ -4,44 +4,61 @@ import json
 import random
 import webapp2
 import tdt_database
+from collections import Counter
 from datetime import datetime
-from google.appengine.api import taskqueue
 from google.appengine.ext import db
-from tdt_database import Tweet, TrackEventCounterShard
+from tdt_database import Tweet, TrackEventCounterShard, CurrentEventCounter
 
 
 def get_tweets(tasks):
     start_tweets = []
-    start_tasks = []
     end_tweets = []
-    end_tasks = []
     task_list = json.loads(tasks, encoding='utf8')
 
     for task in task_list:
         task_data = json.loads(task)
         if task_data["tag"] == "START":
             start_tweets.append(task_data)
-            start_tasks.append(task)
         else:
             end_tweets.append(task_data)
-            end_tasks.append(task)
 
-    return start_tasks, end_tasks, start_tweets, end_tweets
+    return start_tweets, end_tweets
 
 
-def update_track_event_counter(track_number):
+def update_track_event_counter(track_number, count):
     shard_number = random.randint(0, TrackEventCounterShard.SHARD_COUNT - 1)
-    shard = TrackEventCounterShard.all().filter("shard_number=", shard_number).filter("track_number=", track_number).ancestor(tdt_database.tweets_key()).get()
+    shard = TrackEventCounterShard.all().filter("shard_number=", shard_number).filter("track_number=", track_number).ancestor(tdt_database.counters_key()).get()
 
     if shard is None:
         shard = TrackEventCounterShard(
             shard_number=shard_number,
             track_number=track_number,
-            parent=tdt_database.tweets_key()
+            parent=tdt_database.counters_key()
         )
 
-    shard.event_count += 1
+    shard.event_count += count
     shard.put()
+
+
+def update_current_event_counter(track_number, number):
+    counter = CurrentEventCounter.all().filter("track_number=", track_number).ancestor(tdt_database.counters_key()).get()
+
+    if counter is None:
+        counter = CurrentEventCounter(
+            parent=tdt_database.counters_key(),
+            track_number=track_number
+        )
+
+    counter.balance += number
+    counter.put()
+
+
+def update_counters(track_event_counter, current_event_counter):
+    for cnt in track_event_counter:
+        update_track_event_counter(cnt, track_event_counter[cnt])
+
+    for cnt in current_event_counter:
+        update_current_event_counter(cnt, current_event_counter[cnt])
 
 
 def save_new_tweet(tweet):
@@ -49,7 +66,8 @@ def save_new_tweet(tweet):
         parent=tdt_database.tweets_key(),
         tweet_id=long(tweet['tweet_id']),
         publish_time=datetime.fromtimestamp(tweet['publish_time']),
-        track_number=tweet['track_number']
+        track_number=tweet['track_number'],
+        tag=tweet['tag']
     )
     if 'link' in tweet:
         dtweet.link = tweet['link']
@@ -59,33 +77,36 @@ def save_new_tweet(tweet):
         dtweet.cause = tweet['cause']
     if 'description' in tweet:
         dtweet.description = tweet['description']
-
     dtweet.put()
-    update_track_event_counter(tweet['track_number'])
 
 
-@db.transactional
-def save_start_tweets(start_tweets):
+def save_start_tweets(start_tweets, track_event_counter, current_event_counter):
     for tweet in start_tweets:
         save_new_tweet(tweet)
+        track_event_counter[tweet['track_number']] += 1
+        current_event_counter[tweet['track_number']] += 1
 
 
-@db.transactional
-def save_end_tweets(end_tweets):
+def save_end_tweets(end_tweets, current_event_counter):
     for tweet in end_tweets:
-        dtweets = Tweet.all().ancestor(tdt_database.tweets_key()).filter("track_number =", tweet['track_number'])
-        if dtweets:
-            for dtweet in dtweets:
-                dtweet.end = datetime.fromtimestamp(tweet['publish_time'])
-                dtweet.put()
-        else:
-            save_new_tweet(tweet)
+        save_new_tweet(tweet)
+        current_event_counter[tweet['track_number']] -= 1
+
+
+@db.transactional(xg=True)
+def save_tweets(start_tweets, end_tweets):
+    track_event_counter = Counter()
+    current_event_counter = Counter()
+
+    save_start_tweets(start_tweets, track_event_counter, current_event_counter)
+    save_end_tweets(end_tweets, current_event_counter)
+    update_counters(track_event_counter, current_event_counter)
 
 
 class ProcessTweets(webapp2.RequestHandler):
     def post(self):
         tasks = self.request.body
-        start_tasks, end_tasks, start_tweets, end_tweets = get_tweets(tasks)
+        start_tweets, end_tweets = get_tweets(tasks)
     
         self.response.out.write('Start tweets:<br>\n')
         for tweet in start_tweets:
@@ -95,11 +116,8 @@ class ProcessTweets(webapp2.RequestHandler):
             self.response.out.write('&nbsp;&nbsp;%s<br>\n' % json.dumps(tweet, ensure_ascii=False, encoding='utf8'))
         self.response.out.write('<br>')
     
-        save_start_tweets(start_tweets)
-        self.response.out.write('Start tweets processed successfully!<br>')
-
-        save_end_tweets(end_tweets)
-        self.response.out.write('End tweets processed successfully!<br>')
+        save_tweets(start_tweets, end_tweets)
+        self.response.out.write('Tweets processed successfully!<br>')
 
 
 app = webapp2.WSGIApplication([('/process_tweets', ProcessTweets)], debug=True)

@@ -1,10 +1,14 @@
 import webapp2
+import tdt_database
 from webapp2_extras import jinja2
 from collections import Counter
-from tdt_database import Tweet, TrackEventCounterShard
+from tdt_database import Tweet, TrackEventCounterShard, CurrentEventCounter
 from google.appengine.api import memcache
+from google.appengine.ext import db
+from pprint import pprint
 
 
+@db.transactional(xg=True)
 def get_current_events():
     cache_events_id = "current_events_id"
     cached_events = memcache.get(cache_events_id)
@@ -12,7 +16,20 @@ def get_current_events():
     if cached_events:
         current_events = cached_events
     else:
-        current_events = list(Tweet.gql("WHERE end = :none ORDER BY publish_time DESC", none=None).run(limit=100))
+        current_event_counter = Counter()
+        for entry in CurrentEventCounter.all().ancestor(tdt_database.counters_key()):
+            current_event_counter[entry.track_number] += entry.balance
+
+        current_events = []
+        for cnt in current_event_counter:
+            if current_event_counter[cnt] > 0:
+                events = Tweet.all().ancestor(tdt_database.tweets_key())\
+                    .filter("track_number =", cnt).filter("tag =", "START")\
+                    .order("-tweet_id").fetch(limit=current_event_counter[cnt])
+
+                current_events.extend(events)
+
+        current_events.sort(key=lambda x: x.publish_time, reverse=True)
         memcache.add(cache_events_id, current_events, 120)  # Cache for 2 minutes
 
     return current_events
