@@ -4,6 +4,7 @@ import twitter
 import json
 import webapp2
 from google.appengine.api import taskqueue, memcache
+from tdt_database import Tweet
 
 
 twitter_user = "cdmimoradnosti"
@@ -20,14 +21,25 @@ def split_list(alist, wanted_parts=1):
 def get_tweets(twitter_api):
     cache_tweet_id = 'last_tweet_id'
 
+    # Try to get ID of last tweet from memcache
     last_tweet_id = memcache.get(cache_tweet_id)
-    if last_tweet_id is not None:
+
+    # If ID of last tweet is not in memcache, fetch it from database
+    if not last_tweet_id:
+        last_tweet_db = Tweet.gql("ORDER BY tweet_id DESC").get()  # get returns first entry or None
+        if last_tweet_db:
+            last_tweet_id = last_tweet_db.tweet_id
+
+    if last_tweet_id:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, since_id=last_tweet_id, include_rts=False,
                                                exclude_replies=True)
     else:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, count=200, include_rts=False,
                                                exclude_replies=True)
-        memcache.add(cache_tweet_id, statuses[0].id, 604800)  # cache for 1 week
+        last_tweet_id = statuses[0].id
+
+    # Update the memcache
+    memcache.add(cache_tweet_id, last_tweet_id, 604800)  # cache for 1 week
 
     return statuses
 
