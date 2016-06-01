@@ -22,6 +22,17 @@
             </div>
             {% endfor %}
         </div>
+
+        <h2>Nejčastější příčiny</h2>
+        <div>
+            {% for cause, count in frequent_causes %}
+            <div class="progress">
+                <div class="progress-bar" style="width: {{ 100 * count / frequent_causes_max }}%; text-align: left; padding-left: 1em">
+                    <strong>{{ cause }}</strong> ({{ count }})
+                </div>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 </div>
 {% endblock %}

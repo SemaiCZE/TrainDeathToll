@@ -31,6 +31,14 @@ class TrackEventCounterShard(db.Model):
     event_count = db.IntegerProperty(default=0)
 
 
+class EventCauseCounterShard(db.Model):
+    """Records the number of events for every cause of event"""
+    SHARD_COUNT = 10
+    shard_number = db.IntegerProperty(required=True)
+    cause = db.StringProperty(required=True)
+    event_count = db.IntegerProperty(default=0)
+
+
 class CurrentEventCounter(db.Model):
     """Counter for ballance of starts and ends of events"""
     track_number = db.StringProperty(required=True)

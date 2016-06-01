@@ -2,7 +2,7 @@ import webapp2
 import tdt_database
 from webapp2_extras import jinja2
 from collections import Counter
-from tdt_database import Tweet, TrackEventCounterShard, CurrentEventCounter
+from tdt_database import Tweet, TrackEventCounterShard, EventCauseCounterShard, CurrentEventCounter
 from google.appengine.api import memcache
 from google.appengine.ext import db
 from pprint import pprint
@@ -51,6 +51,22 @@ def get_track_event_counter():
     return track_event_counter
 
 
+def get_event_cause_counter():
+    counter_id = "event_cause_counter_id"
+    cached_counter = memcache.get(counter_id)
+
+    if cached_counter:
+        event_cause_counter = cached_counter
+    else:
+        event_cause_counter = Counter()
+        for entry in EventCauseCounterShard.all():
+            event_cause_counter[entry.cause] += entry.event_count
+
+        memcache.add(counter_id, event_cause_counter, 120)  # Cache for 2 minutes
+
+    return event_cause_counter
+
+
 class MainPage(webapp2.RequestHandler):
     @webapp2.cached_property
     def jinja2(self):
@@ -63,12 +79,15 @@ class MainPage(webapp2.RequestHandler):
     def get(self):
         current_events = get_current_events()
         track_event_counter = get_track_event_counter()
+        event_cause_counter = get_event_cause_counter()
 
         self.render_response(
             "stats.html",
             current_events=current_events,
             frequent_tracks=track_event_counter.most_common(10),
-            frequent_tracks_max=track_event_counter.most_common(1)[0][1]
+            frequent_tracks_max=track_event_counter.most_common(1)[0][1] if len(track_event_counter) > 0 else 0,
+            frequent_causes=event_cause_counter.most_common(10),
+            frequent_causes_max=event_cause_counter.most_common(1)[0][1] if len(event_cause_counter) > 0 else 0
         )
 
 
