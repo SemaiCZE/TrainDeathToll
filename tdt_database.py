@@ -17,8 +17,8 @@ class Tweet(db.Model):
     publish_time = db.DateTimeProperty(required=True)
     track_number = db.StringProperty(required=True)
     tag = db.StringProperty(required=True)
-    link = db.LinkProperty()
-    desired_end = db.TimeProperty()
+    link = db.StringProperty()
+    desired_end = db.DateTimeProperty()
     cause = db.StringProperty()
     description = db.StringProperty()
 

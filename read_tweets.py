@@ -1,8 +1,11 @@
 #!/usr/bin/env python
+# coding=utf-8
 
 import twitter
 import json
 import webapp2
+import time
+from datetime import datetime, date
 from google.appengine.api import taskqueue, memcache
 from tdt_database import Tweet
 
@@ -10,6 +13,20 @@ from tdt_database import Tweet
 twitter_user = "cdmimoradnosti"
 queue_name = "new-tweets"
 task_process_script = "/process_tweets"
+months_map = {
+    u"led": 1,
+    u"úno": 2,
+    u"bře": 3,
+    u"dub": 4,
+    u"kvě": 5,
+    u"črv": 6,
+    u"čer": 7,
+    u"srp": 8,
+    u"zář": 9,
+    u"říj": 10,
+    u"lis": 11,
+    u"pro": 12
+}
 
 
 def split_list(alist, wanted_parts=1):
@@ -66,17 +83,38 @@ def get_status_info(status):
     text = text[6:]
 
     # Get hyperlink from the end
-    if text[-23:].startswith(u"https://"):
-        result["link"] = text[-23:]
-        text = text[:-24]
+    try:
+        link_index = text.index(u"http")
+        result["link"] = text[link_index:]
+        text = text[:link_index - 1]
+    except ValueError:
+        pass
 
     # Get desired end of issue
-    if text[-13:].startswith(u"Konec v "):
-        result["desired_end"] = text[-5:]
-        text = text[:-15]
+    try:
+        endtime_index = text.index(u"Konec v")
+        endtime_str = text[endtime_index:]
+        # trim "Konec v " string from begining
+        endtime_str = endtime_str[8:]
+
+        current_time = datetime.now()
+        if len(endtime_str) == 5:
+            end_time = datetime.strptime(endtime_str, '%H:%M')
+            result["desired_end"] = time.mktime(datetime.combine(current_time.date(), end_time.time()).timetuple())
+        else:
+            end_time = datetime.strptime(endtime_str[-5:], '%H:%M')
+            endtime_str = endtime_str[:-8]  # trims " v 09:30" string
+            i = endtime_str.find(u".")
+            day = endtime_str[:i]
+            month = months_map[endtime_str[i + 2:]]
+            end_date = date(current_time.year, month, int(day))
+            result["desired_end"] = time.mktime(datetime.combine(end_date, end_time.time()).timetuple())
+        text = text[:endtime_index - 1]
+    except ValueError:
+        pass
 
     # Get cause of the issue
-    last_dot = text.rfind(u'.', 0, -1)
+    last_dot = text.rfind(u'.', 0, -2)
     result["cause"] = text[last_dot + 2:-1]
     text = text[:last_dot]
 
@@ -102,17 +140,18 @@ class ReadTweets(webapp2.RequestHandler):
 
         api = twitter.Api(consumer_key, consumer_secret, access_key, access_secret, cache=None)
         statuses = get_tweets(api)
-        for status in statuses:
-            status_data = get_status_info(status)
-            tweets.append(status_data)
+        if statuses:
+            for status in statuses:
+                status_data = get_status_info(status)
+                tweets.append(status_data)
 
-        # Don't send more than 100 tweets at once
-        if len(tweets) >= 100:
-            split_tasks = split_list(tweets, wanted_parts=4)
-            for item in split_tasks:
-                q.add([taskqueue.Task(payload=json.dumps(item), method='POST', url=task_process_script)])
-        else:
-            q.add([taskqueue.Task(payload=json.dumps(tweets), method='POST', url=task_process_script)])
+            # Don't send more than 100 tweets at once
+            if len(tweets) >= 100:
+                split_tasks = split_list(tweets, wanted_parts=4)
+                for item in split_tasks:
+                    q.add([taskqueue.Task(payload=json.dumps(item), method='POST', url=task_process_script)])
+            else:
+                q.add([taskqueue.Task(payload=json.dumps(tweets), method='POST', url=task_process_script)])
 
         self.response.out.write('<br>\n'.join(tweets))
 

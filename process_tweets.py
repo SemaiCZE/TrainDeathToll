@@ -90,7 +90,7 @@ def save_new_tweet(tweet):
     if 'link' in tweet:
         dtweet.link = tweet['link']
     if 'desired_end' in tweet:
-        dtweet.desired_end = datetime.strptime(tweet['desired_end'], '%H:%M').time()
+        dtweet.desired_end = datetime.fromtimestamp(tweet['desired_end'])
     if 'cause' in tweet:
         dtweet.cause = tweet['cause']
     if 'description' in tweet:

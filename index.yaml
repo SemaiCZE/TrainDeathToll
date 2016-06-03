@@ -9,3 +9,11 @@ indexes:
   - name: end
   - name: publish_time
 
+- kind: Tweet
+  ancestor: yes
+  properties:
+  - name: tag
+  - name: track_number
+  - name: tweet_id
+    direction: desc
+
