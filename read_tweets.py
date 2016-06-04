@@ -5,6 +5,7 @@ import twitter
 import json
 import webapp2
 import time
+import logging
 from datetime import datetime, date
 from google.appengine.api import taskqueue, memcache
 from tdt_database import Tweet
@@ -53,7 +54,8 @@ def get_tweets(twitter_api):
     else:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, count=200, include_rts=False,
                                                exclude_replies=True)
-        last_tweet_id = statuses[0].id
+    
+    last_tweet_id = statuses[0].id
 
     # Update the memcache
     memcache.add(cache_tweet_id, last_tweet_id, 604800)  # cache for 1 week
@@ -144,6 +146,7 @@ class ReadTweets(webapp2.RequestHandler):
             for status in statuses:
                 status_data = get_status_info(status)
                 tweets.append(status_data)
+                logging.info("Got new tweet: " + str(status.id))
 
             # Don't send more than 100 tweets at once
             if len(tweets) >= 100:

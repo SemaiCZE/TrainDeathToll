@@ -3,6 +3,7 @@
 import json
 import random
 import webapp2
+import logging
 import tdt_database
 from collections import Counter
 from datetime import datetime
@@ -101,6 +102,7 @@ def save_new_tweet(tweet):
 def save_start_tweets(start_tweets, track_event_counter, event_cause_counter, current_event_counter):
     for tweet in start_tweets:
         save_new_tweet(tweet)
+        logging.info("Saving start tweet: " + str(tweet['tweet_id']))
         track_event_counter[tweet['track_number']] += 1
         event_cause_counter[tweet['cause']] += 1
         current_event_counter[tweet['track_number']] += 1
@@ -109,6 +111,7 @@ def save_start_tweets(start_tweets, track_event_counter, event_cause_counter, cu
 def save_end_tweets(end_tweets, current_event_counter):
     for tweet in end_tweets:
         save_new_tweet(tweet)
+        logging.info("Saving end tweet: " + str(tweet['tweet_id']))
         current_event_counter[tweet['track_number']] -= 1
 
 
