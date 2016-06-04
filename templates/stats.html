@@ -17,7 +17,7 @@
             {% for track, count in frequent_tracks %}
             <div class="progress">
                 <div class="progress-bar" style="width: {{ 100 * count / frequent_tracks_max }}%; text-align: left; padding-left: 1em; color: orange">
-                    <strong>{{ track }}</strong> ({{ count }})
+                    <strong style="position: absolute;">{{ track }} ({{ count }})</strong>
                 </div>
             </div>
             {% endfor %}
@@ -28,7 +28,7 @@
             {% for cause, count in frequent_causes %}
             <div class="progress">
                 <div class="progress-bar" style="width: {{ 100 * count / frequent_causes_max }}%; text-align: left; padding-left: 1em; color: orange">
-                    <strong>{{ cause }}</strong> ({{ count }})
+                    <strong style="position: absolute;">{{ cause }} ({{ count }})</strong>
                 </div>
             </div>
             {% endfor %}
