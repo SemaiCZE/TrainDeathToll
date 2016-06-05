@@ -41,12 +41,14 @@ def get_tweets(twitter_api):
 
     # Try to get ID of last tweet from memcache
     last_tweet_id = memcache.get(cache_tweet_id)
+    logging.info("Last tweet id from memcache: " + str(last_tweet_id))
 
     # If ID of last tweet is not in memcache, fetch it from database
     if not last_tweet_id:
         last_tweet_db = Tweet.gql("ORDER BY tweet_id DESC").get()  # get returns first entry or None
         if last_tweet_db:
             last_tweet_id = last_tweet_db.tweet_id
+            logging.info("Last tweet id from database: " + str(last_tweet_id))
 
     if last_tweet_id:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, since_id=last_tweet_id, include_rts=False,
@@ -54,11 +56,14 @@ def get_tweets(twitter_api):
     else:
         statuses = twitter_api.GetUserTimeline(screen_name=twitter_user, count=200, include_rts=False,
                                                exclude_replies=True)
-    
-    last_tweet_id = statuses[0].id
+
+    if statuses:
+        last_tweet_id = statuses[0].id
+        logging.info("Last tweet id from new tweets: " + str(last_tweet_id))
 
     # Update the memcache
-    memcache.add(cache_tweet_id, last_tweet_id, 604800)  # cache for 1 week
+    memcache.set(cache_tweet_id, last_tweet_id, 604800)  # cache for 1 week
+    logging.info("Memcache updated with: " + str(last_tweet_id))
 
     return statuses
 

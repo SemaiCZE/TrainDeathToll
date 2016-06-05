@@ -5,7 +5,6 @@ from collections import Counter
 from tdt_database import Tweet, TrackEventCounterShard, EventCauseCounterShard, CurrentEventCounter
 from google.appengine.api import memcache
 from google.appengine.ext import db
-from pprint import pprint
 
 
 @db.transactional(xg=True)
