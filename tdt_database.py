@@ -40,6 +40,6 @@ class EventCauseCounterShard(db.Model):
 
 
 class CurrentEventCounter(db.Model):
-    """Counter for ballance of starts and ends of events"""
+    """Counter for balance of starts and ends of events"""
     track_number = db.StringProperty(required=True)
     balance = db.IntegerProperty(default=0)
