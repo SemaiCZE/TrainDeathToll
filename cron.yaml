@@ -2,4 +2,6 @@ cron:
 - description: "Get new tweets"
   url: /read_tweets
   schedule: every 10 mins
-
+- description: "Make a word cloud out of event descriptions"
+  url: /make_word_cloud
+  schedule: every 24 hours

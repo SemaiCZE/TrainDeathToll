@@ -1,0 +1,16 @@
+../wordcloud/color_from_image.py
+../wordcloud/wordcloud_cli.py
+../wordcloud/wordcloud.py
+../wordcloud/__init__.py
+../wordcloud/stopwords
+../wordcloud/DroidSansMono.ttf
+../wordcloud/color_from_image.pyc
+../wordcloud/wordcloud_cli.pyc
+../wordcloud/wordcloud.pyc
+../wordcloud/__init__.pyc
+../wordcloud/query_integral_image.so
+SOURCES.txt
+dependency_links.txt
+top_level.txt
+PKG-INFO
+../../../bin/wordcloud_cli.py

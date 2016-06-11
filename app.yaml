@@ -19,6 +19,10 @@ handlers:
   script: process_tweets.app
   login: admin
 
+- url: /make_word_cloud
+  script: make_word_cloud.app
+  login: admin
+
 - url: /.*
   script: not_found.app
 
@@ -27,4 +31,8 @@ libraries:
   version: latest
 - name: jinja2
   version: latest
+- name: numpy
+  version: "1.6.1"
+- name: PIL
+  version: "1.1.7"
 
