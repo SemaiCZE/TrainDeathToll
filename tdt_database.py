@@ -39,6 +39,13 @@ class EventCauseCounterShard(db.Model):
     event_count = db.IntegerProperty(default=0)
 
 
+class EventDescriptionCounterShard(db.Model):
+    """Records the number of occurrences of a word in event descriptions"""
+    SHARD_COUNT = 5
+    shard_number = db.IntegerProperty(required=True)
+    word = db.StringProperty(required=True)
+    frequency = db.IntegerProperty(default=0)
+
 class CurrentEventCounter(db.Model):
     """Counter for balance of starts and ends of events"""
     track_number = db.StringProperty(required=True)

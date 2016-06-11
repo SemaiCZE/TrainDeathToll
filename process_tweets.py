@@ -8,7 +8,7 @@ import tdt_database
 from collections import Counter
 from datetime import datetime
 from google.appengine.ext import db
-from tdt_database import Tweet, TrackEventCounterShard, EventCauseCounterShard, CurrentEventCounter
+from tdt_database import Tweet, TrackEventCounterShard, EventCauseCounterShard, CurrentEventCounter, EventDescriptionCounterShard
 
 
 def get_tweets(tasks):
@@ -69,12 +69,30 @@ def update_current_event_counter(track_number, number):
     counter.put()
 
 
-def update_counters(track_event_counter, event_cause_counter, current_event_counter):
+def update_word_frequency_counter(word, number):
+    shard_number = random.randint(0, EventDescriptionCounterShard.SHARD_COUNT - 1)
+    counter = EventDescriptionCounterShard.all().filter("word=", word).ancestor(tdt_database.counters_key()).get()
+
+    if counter is None:
+        counter = EventDescriptionCounterShard(
+            shard_number=shard_number,
+            parent=tdt_database.counters_key(),
+            word=word
+        )
+
+    counter.frequency += number
+    counter.put()
+
+
+def update_counters(track_event_counter, event_cause_counter, word_frequency_counter, current_event_counter):
     for track, count in track_event_counter.items():
         update_track_event_counter(track, count)
 
     for cause, count in event_cause_counter.items():
         update_event_cause_counter(cause, count)
+
+    for word, count in word_frequency_counter.items():
+        update_word_frequency_counter(word, count)
 
     for key, count in current_event_counter.items():
         update_current_event_counter(key, count)
@@ -99,13 +117,17 @@ def save_new_tweet(tweet):
     dtweet.put()
 
 
-def save_start_tweets(start_tweets, track_event_counter, event_cause_counter, current_event_counter):
+def save_start_tweets(start_tweets, track_event_counter, event_cause_counter, word_frequency_counter, current_event_counter):
     for tweet in start_tweets:
         save_new_tweet(tweet)
         logging.info("Saving start tweet: " + str(tweet['tweet_id']))
         track_event_counter[tweet['track_number']] += 1
         event_cause_counter[tweet['cause']] += 1
         current_event_counter[tweet['track_number']] += 1
+
+        for word in tweet['description'].split(" "):
+            if len(word) > 3:
+                word_frequency_counter[word.lower()] += 1
 
 
 def save_end_tweets(end_tweets, current_event_counter):
@@ -119,11 +141,12 @@ def save_end_tweets(end_tweets, current_event_counter):
 def save_tweets(start_tweets, end_tweets):
     track_event_counter = Counter()
     event_cause_counter = Counter()
+    word_frequency_counter = Counter()
     current_event_counter = Counter()
 
-    save_start_tweets(start_tweets, track_event_counter, event_cause_counter, current_event_counter)
+    save_start_tweets(start_tweets, track_event_counter, event_cause_counter, word_frequency_counter, current_event_counter)
     save_end_tweets(end_tweets, current_event_counter)
-    update_counters(track_event_counter, event_cause_counter, current_event_counter)
+    update_counters(track_event_counter, event_cause_counter, word_frequency_counter, current_event_counter)
 
 
 class ProcessTweets(webapp2.RequestHandler):
