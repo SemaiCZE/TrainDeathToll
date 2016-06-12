@@ -45,7 +45,7 @@ def get_track_event_counter():
         for entry in TrackEventCounterShard.all():
             track_event_counter[entry.track_number] += entry.event_count
 
-        memcache.add(counter_id, track_event_counter, 120)  # Cache for 2 minutes
+        memcache.add(counter_id, track_event_counter, 3600)  # Cache for 1 hour
 
     return track_event_counter
 
@@ -61,7 +61,7 @@ def get_event_cause_counter():
         for entry in EventCauseCounterShard.all():
             event_cause_counter[entry.cause] += entry.event_count
 
-        memcache.add(counter_id, event_cause_counter, 120)  # Cache for 2 minutes
+        memcache.add(counter_id, event_cause_counter, 3600)  # Cache for 1 hour
 
     return event_cause_counter
 

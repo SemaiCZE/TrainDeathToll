@@ -25,7 +25,7 @@ class Tweet(db.Model):
 
 class TrackEventCounterShard(db.Model):
     """Records the number of events for every track"""
-    SHARD_COUNT = 10
+    SHARD_COUNT = 4
     shard_number = db.IntegerProperty(required=True)
     track_number = db.StringProperty(required=True)
     event_count = db.IntegerProperty(default=0)
@@ -33,7 +33,7 @@ class TrackEventCounterShard(db.Model):
 
 class EventCauseCounterShard(db.Model):
     """Records the number of events for every cause of event"""
-    SHARD_COUNT = 10
+    SHARD_COUNT = 4
     shard_number = db.IntegerProperty(required=True)
     cause = db.StringProperty(required=True)
     event_count = db.IntegerProperty(default=0)
@@ -41,7 +41,7 @@ class EventCauseCounterShard(db.Model):
 
 class EventDescriptionCounterShard(db.Model):
     """Records the number of occurrences of a word in event descriptions"""
-    SHARD_COUNT = 5
+    SHARD_COUNT = 4
     shard_number = db.IntegerProperty(required=True)
     word = db.StringProperty(required=True)
     frequency = db.IntegerProperty(default=0)
